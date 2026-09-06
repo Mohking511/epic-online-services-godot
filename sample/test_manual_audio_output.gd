@@ -14,48 +14,47 @@
 # To run this sample, uncomment the _run() line in _ready() method
 extends Node
 
-
 # Provide 2 different Product User IDs for testing
-var user1_puid = ""
-var user2_puid = Store.second_product_user_id
+var user1_puid: String = ""
+var user2_puid: String = Store.second_product_user_id
 
 
-const BUCKET_ID = "test_manual_audio_output"
+const BUCKET_ID: String = "test_manual_audio_output"
 
 
 var _lobby: HLobby
-var _connected_lobby_signals = false
-var _rtc_room_name = ""
+var _connected_lobby_signals: bool = false
+var _rtc_room_name: String = ""
 
-var player_voices = {}
+var player_voices: Dictionary = {}
 
 
 # for audio input
-var _audio_input: AudioStreamPlayer
-var _audio_effect_capture: AudioEffectCapture
-var _audio_bus_index: int
-const SAMPLE_RATE = 48000
-const CHANNELS = 1
-const CHUNK_DURATION_MS = 10 # 10 milliseconds
-const FRAMES_PER_CHUNK = int(SAMPLE_RATE * CHUNK_DURATION_MS / 1000.0) # 480 frames
+var _audio_input: AudioStreamPlayer = null
+var _audio_effect_capture: AudioEffectCapture = null
+var _audio_bus_index: int = 0
+const SAMPLE_RATE: int = 48000
+const CHANNELS: int = 1
+const CHUNK_DURATION_MS: int = 10 # 10 milliseconds
+const FRAMES_PER_CHUNK: int = int(SAMPLE_RATE * CHUNK_DURATION_MS / 1000.0) # 480 frames
 
 # Recording state
-var is_recording = false
-var audio_buffer = PackedFloat32Array()
+var is_recording: bool = false
+var audio_buffer: PackedFloat32Array = PackedFloat32Array()
 
 # Voice activity detection (optional)
-var voice_threshold = 0.01 # Adjust based on your needs
-var silence_frames = 0
-var max_silence_frames = 10 # Stop recording after this many silent chunks
+var voice_threshold: float = 0.01 # Adjust based on your needs
+var silence_frames: int = 0
+var max_silence_frames: int = 10 # Stop recording after this many silent chunks
 
 
-func _ready():
+func _ready() -> void:
 	# Uncomment the below line to run this sample
 	#_run()
 	pass
 
 
-func _run():
+func _run() -> void:
 	IEOS.rtc_audio_audio_before_render.connect(_on_rtc_audio_audio_before_render)
 	
 	await HAuth.logged_in
@@ -73,14 +72,14 @@ func _run():
 		_run_user1()
 
 
-func _run_user1():
+func _run_user1() -> void:
 	_log("Running as user1")
 	
 	_log("waiting for lobby to be created")
 	await get_tree().create_timer(5).timeout
 	
 	_log("searching for lobbies now")
-	var lobbies: Array = await HLobbies.search_by_product_user_id_async(user2_puid)
+	var lobbies: Array[HLobby] = await HLobbies.search_by_product_user_id_async(user2_puid)
 	
 	_log("found lobbies count: ", len(lobbies))
 	if len(lobbies) > 0:
@@ -90,7 +89,7 @@ func _run_user1():
 		_on_lobby_joined()
 
 
-func _run_user2():
+func _run_user2() -> void:
 	_log("Running as user2")
 	
 	var create_opts := EOS.Lobby.CreateLobbyOptions.new()
@@ -110,23 +109,23 @@ func _run_user2():
 	_on_lobby_joined()
 
 
-func _on_lobby_joined():
+func _on_lobby_joined() -> void:
 	_lobby.lobby_updated.connect(_on_lobby_updated)
 
 
-func _on_lobby_updated():
+func _on_lobby_updated() -> void:
 	if _lobby.rtc_room_name and not _connected_lobby_signals:
 		_connected_lobby_signals = true
 		_connect_rtc_signals()
 
 
-func _connect_rtc_signals():
+func _connect_rtc_signals() -> void:
 	_rtc_room_name = _lobby.rtc_room_name
 	_log("Got rtc room name: ", _rtc_room_name)
 
 	if not is_user2():
 		_log("setting up manual audio output for user1")
-		var opts = EOS.RTCAudio.AddNotifyAudioBeforeRenderOptions.new()
+		var opts := EOS.RTCAudio.AddNotifyAudioBeforeRenderOptions.new()
 		opts.unmixed_audio = true
 		opts.room_name = _rtc_room_name
 		EOS.RTCAudio.RTCAudioInterface.add_notify_audio_before_render(opts)
@@ -134,11 +133,11 @@ func _connect_rtc_signals():
 		# create the audio stream player node to hear user2's voice
 		
 		# AudioStreamGenerator for real-time audio streaming
-		var stream_generator = AudioStreamGenerator.new()
+		var stream_generator: AudioStreamGenerator = AudioStreamGenerator.new()
 		stream_generator.mix_rate = 48000 # 48000 is what EOS gives
 		stream_generator.buffer_length = 0.01 # 10ms buffer is what EOS gives
 		
-		var audio_player = AudioStreamPlayer.new()
+		var audio_player: AudioStreamPlayer = AudioStreamPlayer.new()
 		add_child(audio_player)
 		audio_player.stream = stream_generator
 		audio_player.autoplay = true
@@ -150,10 +149,10 @@ func _connect_rtc_signals():
 		}
 
 
-func _setup_audio_capture():
+func _setup_audio_capture() -> void:
 	_log("Setting up capturing microphone audio")
 	# Get the microphone input bus
-	_audio_bus_index = AudioServer.get_bus_index("Microphone")
+	_audio_bus_index = AudioServer.get_bus_index(&"Microphone")
 	# Get the audio effect capture
 	_audio_effect_capture = AudioServer.get_bus_effect(_audio_bus_index, 0)
 	
@@ -162,40 +161,37 @@ func _setup_audio_capture():
 	add_child(_audio_input)
 	
 	# Set up microphone input
-	var microphone_stream = AudioStreamMicrophone.new()
+	var microphone_stream: AudioStreamMicrophone = AudioStreamMicrophone.new()
 	_audio_input.stream = microphone_stream
-	_audio_input.bus = "Microphone"
+	_audio_input.bus = &"Microphone"
 
 
-func _on_rtc_audio_audio_before_render(data: Dictionary):
-	var puid = data.participant_id
-	if puid in player_voices:
-		#_log("got audio before render: for player: ", puid)
-		var buffer_data = data.buffer
-		var playback = player_voices[puid].playback
-		
-		# Convert the frame data to audio samples
-		var frames = buffer_data["frames"]
-		@warning_ignore("unused_variable")
-		var sample_rate = buffer_data["sample_rate"]
-		@warning_ignore("unused_variable")
-		var channels = buffer_data["channels"]
-		
-		# Create PackedVector2Array for audio data (required by AudioStreamGeneratorPlayback)
-		var audio_data = PackedVector2Array()
-		
-		# Convert integer frames to float samples (normalize to -1.0 to 1.0 range)
-		# Assuming the frames are 16-bit integers (-32768 to 32767)
-		for frame in frames:
-			var sample = float(frame) / 32768.0
-			# For mono audio, use the same sample for both left and right channels
-			audio_data.append(Vector2(sample, sample))
-		
-		# Push the audio data to the stream
-		playback.push_buffer(audio_data)
+func _on_rtc_audio_audio_before_render(data: Dictionary) -> void:
+	var puid: String = data.participant_id
+	if not player_voices.has(puid): return
+	
+	
+	#_log("got audio before render: for player: ", puid)
+	var buffer_data: Variant = data.buffer
+	var playback: AudioStreamPlayback = player_voices[puid].playback
+	
+	# Convert the frame data to audio samples
+	var frames: PackedInt32Array = PackedInt32Array(buffer_data["frames"])
+	# Create PackedVector2Array for audio data (required by AudioStreamGeneratorPlayback)
+	var audio_data: PackedVector2Array = PackedVector2Array()
+	
+	# Convert integer frames to float samples (normalize to -1.0 to 1.0 range)
+	# Assuming the frames are 16-bit integers (-32768 to 32767)
+	for frame: int in frames:
+		var sample: float = float(frame) / pow(2.0, 15.0)
+		# For mono audio, use the same sample for both left and right channels
+		audio_data.append(Vector2.ONE * sample)
+	
+	# Push the audio data to the stream
+	playback.push_buffer(audio_data)
 
 
-func _process(_delta: float):
+func _process(_delta: float) -> void:
 	if not is_user2():
 		return
 	
@@ -203,15 +199,15 @@ func _process(_delta: float):
 		return
 	
 	# Get available audio frames
-	var available_frames = _audio_effect_capture.get_frames_available()
+	var available_frames: int = _audio_effect_capture.get_frames_available()
 	
 	if available_frames >= FRAMES_PER_CHUNK:
 		# Capture audio chunk
-		var audio_data = _audio_effect_capture.get_buffer(FRAMES_PER_CHUNK)
+		var audio_data: PackedVector2Array = _audio_effect_capture.get_buffer(FRAMES_PER_CHUNK)
 		process_audio_chunk(audio_data)
 
 
-func start_voice_recording():
+func start_voice_recording() -> void:
 	if is_recording or not _audio_input:
 		return
 	
@@ -226,7 +222,7 @@ func start_voice_recording():
 	_log("Voice recording started")
 
 
-func stop_voice_recording():
+func stop_voice_recording() -> void:
 	if not is_recording or not _audio_input:
 		return
 	
@@ -236,24 +232,24 @@ func stop_voice_recording():
 	_log("Voice recording stopped")
 
 
-func process_audio_chunk(audio_data: PackedVector2Array):
+func process_audio_chunk(audio_data: PackedVector2Array) -> void:
 	# Convert stereo Vector2 data to mono float array
-	var mono_samples = PackedFloat32Array()
+	var mono_samples: PackedFloat32Array = PackedFloat32Array()
 	
-	for sample in audio_data:
+	for sample: Vector2 in audio_data:
 		# Convert stereo to mono by averaging left and right channels
-		var mono_sample = (sample.x + sample.y) / 2.0
+		var mono_sample: float = (sample.x + sample.y) / 2.0
 		mono_samples.append(mono_sample)
 	
 	# Convert to 16-bit integer format
-	var frames_16bit = convert_to_16bit(mono_samples)
+	var frames_16bit: PackedInt32Array = convert_to_16bit(mono_samples)
 		
 	# Broadcast the voice data
-	var send_opts = EOS.RTCAudio.SendAudioOptions.new()
+	var send_opts := EOS.RTCAudio.SendAudioOptions.new()
 	send_opts.room_name = _rtc_room_name
-	send_opts.frames = PackedInt32Array(frames_16bit)
+	send_opts.frames = frames_16bit
 	
-	var send_res = EOS.RTCAudio.RTCAudioInterface.send_audio(send_opts)
+	var send_res: EOS.Result = EOS.RTCAudio.RTCAudioInterface.send_audio(send_opts) as EOS.Result
 	if not EOS.is_success(send_res):
 		_log("Failed to send audio data code=", EOS.result_str(send_res))
 		return
@@ -261,15 +257,15 @@ func process_audio_chunk(audio_data: PackedVector2Array):
 		_log("Send audio success")
 
 
-func convert_to_16bit(float_samples: PackedFloat32Array) -> Array:
-	var int_samples = []
+func convert_to_16bit(float_samples: PackedFloat32Array) -> PackedInt32Array:
+	var int_samples: PackedInt32Array = PackedInt32Array()
 	
 	for sample in float_samples:
 		# Clamp sample to [-1.0, 1.0] range
 		sample = clamp(sample, -1.0, 1.0)
 		
 		# Convert to 16-bit integer (-32768 to 32767)
-		var int_sample = int(sample * 32767.0)
+		var int_sample: int = int(sample * 32767.0)
 		int_samples.append(int_sample)
 	
 	return int_samples
@@ -277,7 +273,7 @@ func convert_to_16bit(float_samples: PackedFloat32Array) -> Array:
 
 func has_voice_activity(samples: PackedFloat32Array) -> bool:
 	# Simple voice activity detection based on RMS (Root Mean Square)
-	var rms = 0.0
+	var rms: float = 0.0
 	
 	for sample in samples:
 		rms += sample * sample
@@ -296,26 +292,26 @@ func _input(_event: InputEvent) -> void:
 
 #region internals
 
-func _log_only_user1(v0, v1 = null):
+func _log_only_user1(v0: Variant, v1: Variant = null) -> void:
 	_log(v0, v1, user1_puid)
 
 
-func _log_only_user2(v0, v1 = null):
+func _log_only_user2(v0: Variant, v1: Variant = null) -> void:
 	_log(v0, v1, user2_puid)
 
 
 func is_user2() -> bool:
 	return HAuth.product_user_id == user2_puid
 
-func _log(v0, v1 = null, only_user_with_puid = null):
-	var user_num = "2" if is_user2() else "1"
+func _log(v0: Variant, v1: Variant = null, only_user_with_puid: Variant = null) -> void:
+	var user_num: String = "2" if is_user2() else "1"
 	
 	if only_user_with_puid and only_user_with_puid != HAuth.product_user_id:
 		return
 	
 	if v1 == null:
-		print("user:: " + str(user_num) + ":: ", v0)
+		print("user:: " + str(user_num) + ":: " + str(v0))
 	else:
-		print("user:: " + str(user_num) + ":: ", v0, v1)
+		print("user:: " + str(user_num) + ":: " + str(v0) + str(v1))
 
 #endregion
