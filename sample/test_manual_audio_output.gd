@@ -22,9 +22,9 @@ var user2_puid: String = Store.second_product_user_id
 const BUCKET_ID: String = "test_manual_audio_output"
 
 
-var _lobby: HLobby
+var _lobby: HLobby = null
 var _connected_lobby_signals: bool = false
-var _rtc_room_name: String = ""
+var _rtc_room_name: String = ''
 
 var player_voices: Dictionary = {}
 
